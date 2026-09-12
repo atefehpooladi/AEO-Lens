@@ -70,9 +70,19 @@ The MVP is designed as a React single-page application with a high-contrast neo-
 
 The planned backend uses Python. A local JSON file is sufficient for any MVP history; no production database is required for the prototype.
 
-## Repository status
+## Run the prototype
 
-This repository currently contains the product concept and execution brief in [ContextUnlock.md](ContextUnlock.md). The application implementation is the next stage of the project.
+```bash
+npm install
+npm run api
+npm run dev
+```
+
+Open `http://127.0.0.1:5173/` after both local services start. The Python API reads the local `.env` file; never put an API key in frontend code. To preview all screens without a live call, open `http://127.0.0.1:5173/?demo=1` for clearly marked fictional data.
+
+It includes a session-only founder profile, voice and file capture, AEO scoring, rewrite and citation comparison, Draft, Scout, Founder Snapshot, and a review/download flow. Scout and Snapshot require named sources and dates; the demo fixture is explicitly fictional.
+
+The detailed product brief remains available in [ContextUnlock.md](ContextUnlock.md).
 
 ## Safety and source standards
 

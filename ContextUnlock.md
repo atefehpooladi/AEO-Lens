@@ -16,7 +16,7 @@ The result: even a brand with a genuinely better product can go completely unmen
 
 **Solution:** Context Unlock — a tool with four modes. The first three handle content itself; the fourth handles the research a time-poor founder can't get to:
 
-(a) **Audit** — score existing content for AI-citability
+(a) **Audit** — score existing content for AI-citability, if it is not good enough rewrite it with all ruls for AEO
 (b) **Draft** — write content from a topic
 (c) **Scout** — find a trend or content gap using live web search and draft something grounded in it
 (d) **Founder Snapshot** — research real competitors and a real market-size figure, then draft a ready-to-use positioning paragraph from it
@@ -33,11 +33,170 @@ All four end with a live "would AI actually quote this?" test, or in Founder Sna
 ### Step 0 — Setup
 
 **Frontend**
-- React, single-page prototype
-- Visual style: **Neo-Brutalism paired with a Bento Box card structure** — crisp dark borders, high-contrast flat surfaces, intentional asymmetric accents
-- Color palette: deep slate or off-white background, with one vibrant high-energy accent (electric indigo or vivid teal) plus functional warning/success tags
-- Typography: clean geometric sans-serif (Inter or Plus Jakarta Sans), with distinct weight jumps for rapid hierarchy scanning
-- Layout as a Bento grid: each mode (Audit / Draft / Scout / Founder Snapshot) and each result block (scorecard, rewrite, sources, citation test) gets its own bordered card of varying size, rather than one long scrolling column — this is what makes a Bento layout read as high-density but still scannable
+# Frontend Spec — Context Unlock
+ 
+Drop-in replacement for the **Frontend** subsection of Step 0 — Setup.
+ 
+## Stack
+ 
+| Layer | Choice | Why |
+|---|---|---|
+| Build tool | **Vite** | Fastest dev server, instant HMR, zero config for a one-day build |
+| Framework | **React 19** | Current stable; no more `forwardRef` boilerplate |
+| Styling | **Tailwind CSS v4** | Config now lives in CSS via `@theme` — no `tailwind.config.js` to maintain |
+| Components | **shadcn/ui** (new-york style) | Copy-paste components you own outright, no hidden abstractions. Fully supports React 19 + Tailwind v4 |
+| Icons | **lucide-react** | Ships with shadcn, consistent stroke weight |
+| Animation | **motion** (formerly framer-motion) | Score bars counting up and cards entering is what makes the demo feel alive |
+| Toasts | **sonner** | shadcn deprecated its own toast component in favor of this |
+| Markdown | **react-markdown** | For rendering drafted article output cleanly |
+ 
+## Install
+ 
+```bash
+npm create vite@latest context-unlock -- --template react
+cd context-unlock
+npm install
+npm install tailwindcss @tailwindcss/vite
+npx shadcn@latest init
+npx shadcn@latest add button card textarea input tabs badge progress skeleton sonner separator tooltip
+npm install motion lucide-react react-markdown
+```
+ 
+**`vite.config.js`** — note Tailwind v4 is a Vite plugin now, not a PostCSS step:
+ 
+```js
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import path from "path";
+ 
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
+});
+```
+ 
+**`src/index.css`** — one import replaces the old three `@tailwind` directives:
+ 
+```css
+@import "tailwindcss";
+```
+ 
+## Design direction
+ 
+**Neo-Brutalism + Bento Box.** The tension to hold: brutalism gives it personality, bento keeps it readable at high density. Brutalism without restraint reads as broken, not bold.
+ 
+**Theme tokens** — define once in `index.css` under `@theme`, use everywhere:
+ 
+```css
+@theme {
+  --color-ink: oklch(0.18 0.02 260);      /* near-black, borders and text */
+  --color-surface: oklch(0.98 0.005 260); /* off-white card background */
+  --color-canvas: oklch(0.94 0.01 260);   /* page background, one step darker */
+  --color-accent: oklch(0.58 0.22 275);   /* electric indigo — primary actions */
+  --color-accent-2: oklch(0.72 0.15 195); /* vivid teal — scores, success */
+  --color-warn: oklch(0.75 0.17 70);      /* amber — low scores, warnings */
+  --radius: 0.75rem;
+}
+```
+ 
+Tailwind v4 generates `bg-accent`, `border-ink`, `text-accent-2` etc. from these automatically.
+ 
+**The brutalist card recipe** — one utility class, reused on every card:
+ 
+```css
+@layer components {
+  .card-brut {
+    @apply bg-surface border-2 border-ink rounded-[var(--radius)]
+           shadow-[4px_4px_0_0_var(--color-ink)];
+  }
+  .card-brut-accent {
+    @apply bg-surface border-2 border-ink rounded-[var(--radius)]
+           shadow-[4px_4px_0_0_var(--color-accent)];
+  }
+}
+```
+ 
+The hard offset shadow (no blur) is what reads as neo-brutalist. Use `card-brut-accent` sparingly — only on the card holding the current result, so the eye lands there first.
+ 
+**Typography** — Plus Jakarta Sans via Google Fonts (`400` body, `800` headings). Big weight jumps, not size jumps, carry the hierarchy: an `800` at 20px outranks a `400` at 24px visually and keeps the layout tight.
+ 
+## Bento layout
+ 
+Not one scrolling column. A 12-column CSS grid where cards claim different spans:
+ 
+```
+┌─────────────────────┬───────────┐
+│  Profile (col 8)    │ Mode      │
+│                     │ picker    │
+│                     │ (col 4)   │
+├──────────┬──────────┴───────────┤
+│ Score    │  Rewritten text      │
+│ (col 4)  │  (col 8)             │
+├──────────┴──────────┬───────────┤
+│ Citation test       │ Sources   │
+│ (col 8)             │ (col 4)   │
+└─────────────────────┴───────────┘
+```
+ 
+```jsx
+<div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+  <div className="md:col-span-8 card-brut p-5">…</div>
+  <div className="md:col-span-4 card-brut p-5">…</div>
+</div>
+```
+ 
+Every card collapses to `col-span-12` on mobile. Test this — judges may look at it on a phone.
+ 
+## Motion
+ 
+Keep it minimal and purposeful. Three animations total:
+ 
+1. **Cards enter** as results arrive — fade + 8px rise, staggered 60ms apart
+2. **Score bars fill** from 0 to their value over ~600ms — this is the moment that sells the demo
+3. **Rewrite pass transition** — when the score climbs from pass 1 to pass 2, animate the number counting up rather than swapping it instantly
+```jsx
+import { motion } from "motion/react";
+ 
+<motion.div
+  initial={{ opacity: 0, y: 8 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.3, delay: index * 0.06 }}
+  className="card-brut p-5"
+/>
+```
+ 
+No parallax, no scroll-triggered effects, no page transitions. They eat build time and add nothing on stage.
+ 
+## States that must exist
+ 
+Easy to skip under time pressure, and the first thing that breaks in a live demo:
+ 
+- **Loading** — per-card `<Skeleton />`, never a full-page spinner. The user should see the scorecard building while the citation test is still running
+- **Streaming** — show partial results as each API call returns, rather than blocking the whole UI until all calls finish
+- **Error** — a `sonner` toast plus an inline retry button on the affected card only. One failed call shouldn't blank the screen
+- **Empty** — before the first run, the result cards show a one-line hint of what will appear there, not blank boxes
+## Component map
+ 
+```
+/src/components
+  ProfileCard.jsx        → voice / upload / type input, editable confirmation
+  ModePicker.jsx         → Audit / Draft / Scout / Snapshot tabs
+  ScoreCard.jsx          → 5 criteria bars + average, animated
+  RewritePassBar.jsx     → shows pass 1 → 2 → 3 score progression
+  HighlightedText.jsx    → original text with flagged spans marked
+  RewriteCard.jsx        → optimized output, editable
+  SourcesCard.jsx        → named sources with dates
+  CitationTestCard.jsx   → original vs rewritten, side by side
+  SnapshotCard.jsx       → competitors, market size, positioning draft
+  ReviewPublishCard.jsx  → final text + copy / download / publish
+```
+ 
+## Two things that will bite you
+ 
+- **Tailwind v4 with shadcn is not the same as v3.** If you follow a v3 tutorial you'll hit CSS-variable format changes and HSL→OKLCH conversion. Start a fresh v4 project rather than migrating anything — it is genuinely faster.
+- **Don't build a component library.** Nine cards, one shared `.card-brut` class, done. Abstracting early is the most common way a hackathon frontend eats the whole day.
+ 
 
 **Backend**
 Use Python with it's latest library.
@@ -303,3 +462,8 @@ Both paths use the same engine underneath; they differ only in where the content
 - **Voice is the riskiest live component** — a noisy room breaks transcription. Have a pre-recorded audio file ready, and always keep the typing fallback visible
 - Cap the rewrite loop at 3 passes so the demo never hangs waiting for a perfect score
 - If a judge asks "how do you know this is actually trending?", be upfront that the model judges recency from search results itself and isn't 100% reliable — a known limitation, not something to hide
+
+### General Rules:
+- Don't share any API keys and alos don't put it on the code
+- Selef check log errors follow the style
+- Never guess always stay with real data and reasoning based on the inputs and extracted data and the ruls and structurs that we already defined in this file
