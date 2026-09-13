@@ -77,6 +77,28 @@ npm run preview -- --host 127.0.0.1 --port 4173
 
 Then open `http://127.0.0.1:4173`.
 
+## Deploy to Google Cloud Run
+
+The included `Dockerfile` builds the React app and serves it with the API from one Cloud Run service. The browser therefore calls `/api/*` on the same origin in production.
+
+In [Google Cloud Shell](https://shell.cloud.google.com/), choose your project and region, then run:
+
+```bash
+export PROJECT_ID="your-google-cloud-project-id"
+export REGION="europe-west1"
+gcloud config set project "$PROJECT_ID"
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com
+
+printf '%s' 'your-openai-api-key' | gcloud secrets create context-unlock-openai-key --data-file=-
+gcloud run deploy context-unlock \
+  --source . \
+  --region "$REGION" \
+  --allow-unauthenticated \
+  --set-secrets OPENAI_API_KEY=context-unlock-openai-key:latest
+```
+
+For later deploys, run the final `gcloud run deploy` command again. Keep the key in Secret Manager; do not commit `.env` or pass the key to the client.
+
 ## Project files
 
 ```text
