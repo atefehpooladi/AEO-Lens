@@ -3,9 +3,9 @@ from __future__ import annotations
 import base64, json, os, uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -141,14 +141,27 @@ def verified_trends():
         return cache
     return {"topics": [], "searched_through": date.today().isoformat(), "cached": False}
 
-class Handler(BaseHTTPRequestHandler):
+class Handler(SimpleHTTPRequestHandler):
+    """Serve the built React app and its same-origin API from one Cloud Run service."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=str(ROOT / "dist"), **kwargs)
     def send_json(self, status, data):
         encoded = json.dumps(data).encode(); self.send_response(status); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(encoded)))
         origin = self.headers.get("Origin", "")
         if origin in {"http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173", "http://127.0.0.1:4173"}: self.send_header("Access-Control-Allow-Origin", origin)
         self.end_headers(); self.wfile.write(encoded)
     def do_OPTIONS(self): self.send_json(204, {})
-    def do_GET(self): self.send_json(200, {"ok": True, "key_configured": bool(os.environ.get("OPENAI_API_KEY") or os.environ.get("CODEX_API_KEY"))}) if self.path == "/health" else self.send_json(404, {"error": "Not found"})
+    def do_GET(self):
+        if self.path == "/health":
+            self.send_json(200, {"ok": True, "key_configured": bool(os.environ.get("OPENAI_API_KEY") or os.environ.get("CODEX_API_KEY"))})
+            return
+        if self.path.startswith("/api/"):
+            self.send_json(404, {"error": "Not found"})
+            return
+        dist_root = (ROOT / "dist").resolve()
+        requested = (dist_root / unquote(urlparse(self.path).path).lstrip("/")).resolve()
+        if not requested.is_relative_to(dist_root) or not requested.is_file(): self.path = "/index.html"
+        super().do_GET()
     def do_POST(self):
         try:
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))).decode())
@@ -164,4 +177,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args): print("[Context Unlock]", format % args)
 
 if __name__ == "__main__":
-    load_local_env(); print("Context Unlock API listening at http://127.0.0.1:8000"); ThreadingHTTPServer(("127.0.0.1", 8000), Handler).serve_forever()
+    load_local_env()
+    port = int(os.environ.get("PORT", "8000"))
+    print(f"Context Unlock listening at http://0.0.0.0:{port}")
+    ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
