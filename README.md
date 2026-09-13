@@ -1,96 +1,97 @@
-# ContextUnlock
+# Context Unlock
 
-**ContextUnlock** helps solo founders create content that AI answer engines can quote, cite, and surface. It focuses on **Answer Engine Optimization (AEO)**: making content clear, self-contained, factual, and easy for tools such as ChatGPT, Perplexity, and Google AI Overviews to use in answers.
+Context Unlock is a prototype AEO writing tool for **NordGlow**, a fictional skincare brand. It helps turn existing content or a timely skincare signal into clear, evidence-aware content that is easier for answer engines to quote.
 
-Unlike traditional SEO, which optimizes for search rankings and clicks, ContextUnlock optimizes content for visibility inside AI-generated answers.
+NordGlow’s profile is included in [`brand_profile.md`](brand_profile.md), so there is no business-onboarding flow.
 
-## The problem
+## Features
 
-Founders can have a strong product and still go unmentioned by AI answer engines. Content is often too vague, unstructured, unsupported, or dependent on surrounding context to be quoted cleanly. At the same time, early-stage teams rarely have the time or support to research competitors, market size, and emerging content opportunities.
+### Audit & Auto-Improve
 
-ContextUnlock turns that research and content work into one guided workflow.
+- Paste existing content or record a voice note.
+- Voice notes are transcribed through the local API. When a key detail is missing, the UI asks a click-first follow-up question.
+- The server rewrites content against five AEO criteria:
+  1. Direct answer
+  2. Self-contained sentences
+  3. Clear structure
+  4. Explicit NordGlow naming
+  5. Fact density
+- Every draft is independently validated by a second LLM call that summarizes and quotes it.
+- Generation/validation stops after three attempts or when it plateaus. Internal passes and scores stay private; the user receives only the final editable result.
 
-## Core modes
+### Trend → Content
 
-### Audit
+- Scans a tracked skincare-source pool for dated articles from the last six months:
+  Allure, Byrdie, NewBeauty, Who What Wear, Vogue, Refinery29, InStyle, Glamour, ELLE, and the American Academy of Dermatology.
+- Collects article candidates per domain before grouping them into category signals.
+- A signal requires three distinct tracked sources. It is labelled **Emerging signal** with three or four sources, or **Verified trend** with five or more.
+- Stores the last successful signal set in a local runtime cache so a weak subsequent scan can reuse it.
+- Generates a blog article, LinkedIn post, or Instagram post through the same AEO validation loop.
 
-Score existing content for AI citability using five criteria:
+### Review & publishing
 
-- Direct answer
-- Self-contained sentences
-- Clear structure
-- Explicit brand naming
-- Fact density
+Final content is always editable before publishing.
 
-The tool rewrites weaker content and re-scores it for up to three passes, showing how the score improves along the way.
+- **LinkedIn / Instagram:** copies the text and opens the relevant platform. No OAuth is required for the prototype.
+- **Blog article:** publishes to an in-app NordGlow Journal prototype so the blog flow can be demonstrated without an external CMS.
 
-### Draft
+## Interface
 
-Create a new piece of content from a founder's topic, business context, audience, and differentiator.
+The app uses a calm editorial visual system with a warm canvas, a single indigo action color, Plus Jakarta Sans, minimal `motion/react` transitions, and the Context Unlock logo mark. It keeps one active task on screen at a time and provides dedicated processing and inline retry states.
 
-### Scout
+## Run locally
 
-Research timely content opportunities using multiple search angles: audience questions, competitor activity, and relevant news or data. Recommendations must be tied to named, dated sources rather than invented trends.
+### Prerequisites
 
-### Founder Snapshot
+- Node.js and npm
+- Python 3
+- An OpenAI API key
 
-Give a time-constrained founder a concise, source-backed view of:
+### Setup
 
-- Named competitors and their positioning
-- A citable market-size figure
-- A clear differentiator
-- A ready-to-use positioning paragraph for a pitch deck or About page
+Create a local `.env` file in the project root:
 
-The resulting positioning can be passed into the Audit flow to make it AEO-ready.
+```env
+OPENAI_API_KEY=your_key_here
+```
 
-## Workflow
-
-1. Build a session-only profile through voice, file upload, or a typed form.
-2. Confirm the extracted business, audience, content goal, and differentiator.
-3. Choose Audit, Draft, Scout, or Founder Snapshot.
-4. Generate or improve the content with source-backed research where applicable.
-5. Run a citation test that compares the original and revised content.
-6. Review, edit, copy, download, or publish the final result.
-
-Nothing is published automatically: the founder always reviews the final content first.
-
-## AEO principles
-
-ContextUnlock favors content that:
-
-- Answers the main question early
-- Uses short, independently understandable sentences
-- Names the brand or subject explicitly
-- Includes concrete facts, numbers, and sources
-- Uses scannable paragraphs and headings
-
-## Planned product experience
-
-The MVP is designed as a React single-page application with a high-contrast neo-brutalist bento-card interface. Each stage—profile, audit score, rewrite, sources, market snapshot, citation test, and review—has a focused, scannable card.
-
-The planned backend uses Python. A local JSON file is sufficient for any MVP history; no production database is required for the prototype.
-
-## Run the prototype
+Install dependencies and start the API and frontend in separate terminals:
 
 ```bash
 npm install
 npm run api
+```
+
+```bash
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173/` after both local services start. The Python API reads the local `.env` file; never put an API key in frontend code. To preview all screens without a live call, open `http://127.0.0.1:5173/?demo=1` for clearly marked fictional data.
+Open `http://127.0.0.1:5173`.
 
-It includes a session-only founder profile, voice and file capture, AEO scoring, rewrite and citation comparison, Draft, Scout, Founder Snapshot, and a review/download flow. Scout and Snapshot require named sources and dates; the demo fixture is explicitly fictional.
+For a production-style preview:
 
-The detailed product brief remains available in [ContextUnlock.md](ContextUnlock.md).
+```bash
+npm run build
+npm run preview -- --host 127.0.0.1 --port 4173
+```
 
-## Safety and source standards
+Then open `http://127.0.0.1:4173`.
 
-- API keys belong in a local `.env` file and must never be committed.
-- Research claims must name the source and date.
-- If reliable evidence cannot be found, the tool should say so rather than estimate or invent a fact.
-- Rewrite loops stop after three passes or when the score stops improving.
+## Project files
 
-## Vision
+```text
+api_server.py         Local OpenAI proxy, transcription, validation, and trend pipeline
+brand_profile.md      NordGlow facts and writing rules
+src/App.jsx           Single-page product flows
+src/index.css         Theme tokens and editorial UI styling
+public/               Context Unlock logo assets
+ContextUnlock.md      Detailed product and implementation brief
+```
 
-ContextUnlock gives solo founders a practical way to move from “I do not have the time or team to research and write this” to a clear, evidence-backed, AI-citable piece of content.
+## Safety and prototype limits
+
+- NordGlow and its product facts are fictional demo material.
+- Use only facts supplied in `brand_profile.md`; do not make medical claims or invent product results.
+- API keys remain in `.env` and must never be committed.
+- `.trend_cache.json` is local runtime data and is intentionally ignored by Git.
+- Source links and dates are shown for trend signals, but should be reviewed before externally publishing content.
