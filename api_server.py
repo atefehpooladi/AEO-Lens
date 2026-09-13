@@ -1,6 +1,6 @@
 """Local API for Context Unlock. API keys remain on the local machine."""
 from __future__ import annotations
-import base64, json, os
+import base64, json, os, uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -59,46 +59,39 @@ def create_validated_content(task):
     return {"content": best or draft, "validated": False}
 
 def transcribe(audio_b64, filename, mime_type):
-    """Transcribe a browser voice note with Gemini 3.5 Transcribe."""
-    key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-    if not key: raise RuntimeError("No Google API key found. Add GOOGLE_API_KEY to .env, then restart the local API server.")
+    """Transcribe a browser voice note with OpenAI."""
+    key = os.environ.get("OPENAI_API_KEY") or os.environ.get("CODEX_API_KEY")
+    if not key: raise RuntimeError("No OpenAI API key found. Add OPENAI_API_KEY to .env, then restart the local API server.")
     audio = base64.b64decode(audio_b64)
-    upload_start = Request(
-        "https://generativelanguage.googleapis.com/upload/v1beta/files",
-        data=json.dumps({"file": {"display_name": filename}}).encode(),
-        headers={
-            "x-goog-api-key": key,
-            "Content-Type": "application/json",
-            "X-Goog-Upload-Protocol": "resumable",
-            "X-Goog-Upload-Command": "start",
-            "X-Goog-Upload-Header-Content-Length": str(len(audio)),
-            "X-Goog-Upload-Header-Content-Type": mime_type,
-        },
+    boundary = f"----ContextUnlock{uuid.uuid4().hex}"
+    safe_filename = Path(filename).name.replace('"', "") or "voice.webm"
+    body = (
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="model"\r\n\r\n'
+        "gpt-4o-mini-transcribe\r\n"
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="prompt"\r\n\r\n'
+        "The recording may mention NordGlow, niacinamide, ceramides, squalane, and panthenol.\r\n"
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="file"; filename="{safe_filename}"\r\n'
+        f"Content-Type: {mime_type or 'audio/webm'}\r\n\r\n"
+    ).encode() + audio + f"\r\n--{boundary}--\r\n".encode()
+    request = Request(
+        "https://api.openai.com/v1/audio/transcriptions",
+        data=body,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": f"multipart/form-data; boundary={boundary}"},
         method="POST",
     )
     try:
-        with urlopen(upload_start, timeout=90) as reply:
-            upload_url = reply.headers.get("X-Goog-Upload-URL")
-        if not upload_url: raise RuntimeError("Gemini did not return an upload URL.")
-        upload = Request(upload_url, data=audio, headers={"Content-Length": str(len(audio)), "X-Goog-Upload-Offset": "0", "X-Goog-Upload-Command": "upload, finalize"}, method="POST")
-        with urlopen(upload, timeout=90) as reply: file_data = json.loads(reply.read().decode())
-        file_info = file_data.get("file", {})
-        interaction = Request(
-            "https://generativelanguage.googleapis.com/v1beta/interactions",
-            data=json.dumps({"model": "gemini-3.5-transcribe", "input": [{"type": "audio", "uri": file_info["uri"], "mime_type": mime_type}], "generation_config": {"transcription_config": {"mode": "smart", "custom_vocabulary": ["NordGlow", "niacinamide", "ceramides", "squalane", "panthenol"]}}}).encode(),
-            headers={"x-goog-api-key": key, "Content-Type": "application/json"}, method="POST",
-        )
-        with urlopen(interaction, timeout=90) as reply: result = json.loads(reply.read().decode())
-        text = result.get("output_text") or ""
-        if not text:
-            text = "".join(part.get("text", "") for output in result.get("outputs", []) for part in output.get("content", []))
-        if not text: raise RuntimeError("Gemini returned no transcript.")
+        with urlopen(request, timeout=90) as reply: result = json.loads(reply.read().decode())
+        text = result.get("text", "")
+        if not text: raise RuntimeError("OpenAI returned no transcript.")
         return text
     except HTTPError as error:
         detail = error.read().decode("utf-8", "replace")
-        raise RuntimeError(f"Gemini transcription failed ({error.code}): {detail[:400]}") from error
+        raise RuntimeError(f"OpenAI transcription failed ({error.code}): {detail[:400]}") from error
     except URLError as error:
-        raise RuntimeError("Could not reach Gemini transcription. Check your connection and Google API key.") from error
+        raise RuntimeError("Could not reach OpenAI transcription. Check your connection and OpenAI API key.") from error
 
 def json_object(raw):
     try: return json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
